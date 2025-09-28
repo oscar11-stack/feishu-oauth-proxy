@@ -1,6 +1,17 @@
 // /api/open-apis/docx/v1/appendBlocks/demo
-// 容错版：若没传 document_id 或传了占位值，自动使用 REAL_DOC_ID
-const REAL_DOC_ID = 'JksNdLP4koA7DMxwpdfckPYPngg'; // ← 你的真实文档 ID
+// 容错版：若没传 document_id 或传了占位值，自动使用 REAL_DOC_ID；
+// 先调 children/batch_create，失败再调 blocks/batch_create；把状态打到日志。
+const REAL_DOC_ID = 'JksNdLP4koA7DMxwpdfckPYPngg'; // 你的真实文档 ID
+
+async function callFeishu(path, headers, payload) {
+  const r = await fetch(`https://open.feishu.cn${path}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(payload)
+  });
+  const text = await r.text();
+  return { status: r.status, text, path };
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -16,9 +27,9 @@ export default async function handler(req, res) {
     // 占位值或空 -> 用真实 ID
     const PLACEHOLDERS = new Set(['', 'demo-doc-id', 'demo-doc-001', 'docx_dummy_id_123']);
     if (PLACEHOLDERS.has(document_id)) document_id = REAL_DOC_ID;
-
     const block_id = url.searchParams.get('block_id') || document_id;
 
+    // 准备示例 blocks
     const children = [
       {
         block_type: "heading1",
@@ -38,20 +49,45 @@ export default async function handler(req, res) {
       }
     ];
 
-    const target = `https://open.feishu.cn/open-apis/docx/v1/documents/${encodeURIComponent(document_id)}/blocks/${encodeURIComponent(block_id)}/children/batch_create`;
-
     const headers = { 'Content-Type': 'application/json; charset=utf-8' };
     if (req.headers.authorization) headers['Authorization'] = req.headers.authorization;
 
-    const upstream = await fetch(target, {
-      method: 'POST',
+    // Try 1：老写法（children/batch_create）
+    let result = await callFeishu(
+      `/open-apis/docx/v1/documents/${encodeURIComponent(document_id)}/blocks/${encodeURIComponent(block_id)}/children/batch_create`,
       headers,
-      body: JSON.stringify({ children })
-    });
+      { children }
+    );
+    console.log('[append demo try-1]', result.path, result.status, result.text.slice(0, 200));
 
-    const text = await upstream.text();
-    return res.status(upstream.status).send(text);
+    if (result.status === 200) {
+      return res.status(200).send(result.text);
+    }
+
+    // Try 2：新写法（blocks/batch_create，parent_id 在 body）
+    result = await callFeishu(
+      `/open-apis/docx/v1/documents/${encodeURIComponent(document_id)}/blocks/batch_create`,
+      headers,
+      { parent_id: block_id, children }
+    );
+    console.log('[append demo try-2]', result.path, result.status, result.text.slice(0, 200));
+
+    if (result.status === 200) {
+      return res.status(200).send(result.text);
+    }
+
+    // 两次都没成功
+    return res.status(502).json({
+      error: 'feishu_append_failed',
+      note: 'Tried both endpoints but neither returned 200.',
+      doc: document_id,
+      try1: 'children/batch_create',
+      try2: 'blocks/batch_create',
+      try2_status: result.status,
+      try2_preview: result.text.slice(0, 500)
+    });
   } catch (e) {
+    console.log('[append demo exception]', e);
     return res.status(500).json({ error: 'proxy_exception', detail: String(e) });
   }
 }

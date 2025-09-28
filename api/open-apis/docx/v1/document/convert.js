@@ -1,8 +1,8 @@
-// 把 ChatGPT 的调用代理到飞书“Markdown -> Blocks”正式端点
+// 转发到飞书“Markdown -> Blocks”端点，并打印实际目标以便在 Vercel 日志里确认
 async function proxyFeishu(req, res, path) {
   const target = `https://open.feishu.cn${path}`;
+  console.log('[convert proxy] ->', target); // 看 Runtime Logs 时就能看到实际转发到了哪
   const headers = { 'Content-Type': 'application/json; charset=utf-8' };
-  // 透传用户身份令牌（ChatGPT 会带 Authorization: Bearer <user_access_token>）
   if (req.headers.authorization) headers['Authorization'] = req.headers.authorization;
 
   const body = ['GET','HEAD'].includes(req.method)
@@ -16,6 +16,6 @@ async function proxyFeishu(req, res, path) {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Only POST allowed' });
-  // ✅ 正确端点：Markdown 转 Blocks
+  // ✅ 一定是 blocks/markdownToBlocks，不是 document/convert
   return proxyFeishu(req, res, '/open-apis/docx/v1/blocks/markdownToBlocks');
 }

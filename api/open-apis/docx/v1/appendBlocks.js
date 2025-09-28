@@ -1,32 +1,32 @@
 // /api/open-apis/docx/v1/appendBlocks
-// 兼容：既支持 Body，也支持 Query；缺少 children 时自动注入一段默认文本。
-// block_id 默认 = document_id；写最新修订（Document-Revision-Id: -1）
+// 读取 Body 或 Query 的 document_id / block_id / children；
+// 如果没传 children，就写入一行默认文本；block_id 默认用 document_id；
+// 使用官方端点：/documents/{document_id}/blocks/{block_id}/children/batch_create
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Only POST allowed' });
 
   try {
-    // 解析 Body
+    // 解析 body & query
     const bodyObj = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
-    // 解析 Query（防止 Test 把参数放在 params/query 里）
     const url = new URL(req.url, `https://${req.headers.host}`);
     const q = Object.fromEntries(url.searchParams.entries());
 
     const document_id = bodyObj.document_id || q.document_id || q.doc || '';
-    const rawBlockId = bodyObj.block_id || q.block_id || '';
-    const index = (bodyObj.index !== undefined ? bodyObj.index : (q.index !== undefined ? Number(q.index) : undefined));
+    const rawBlockId  = bodyObj.block_id    || q.block_id    || '';
+    const index = (bodyObj.index !== undefined ? bodyObj.index
+                 : (q.index !== undefined ? Number(q.index) : undefined));
     let children = bodyObj.children;
 
-    if (!document_id) {
-      return res.status(400).json({ error: 'missing_params', need: ['document_id'] });
-    }
-    const block_id = rawBlockId || document_id;
+    if (!document_id) return res.status(400).json({ error: 'missing_params', need: ['document_id'] });
 
-    // 如果没传 children，注入一个默认段落，确保能写成功
+    const block_id = rawBlockId || document_id; // 根 Page 的 block_id = document_id（官方说明）
+
     if (!children) {
       children = [
         {
           block_type: 'paragraph',
-          paragraph: { elements: [{ text_run: { content: '默认写入：来自 appendBlocks 的测试文本。\n', text_element_style: {} } }] }
+          paragraph: { elements: [{ text_run: { content: '默认写入：appendBlocks 测试文本。\n', text_element_style: {} } }] }
         }
       ];
     }
@@ -35,7 +35,7 @@ export default async function handler(req, res) {
 
     const headers = {
       'Content-Type': 'application/json; charset=utf-8',
-      'Document-Revision-Id': '-1'
+      'Document-Revision-Id': '-1' // 写入最新修订
     };
     if (req.headers.authorization) headers['Authorization'] = req.headers.authorization;
 

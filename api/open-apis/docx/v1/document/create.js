@@ -1,8 +1,8 @@
-// 作用：把 ChatGPT 调用代理到飞书 DocX 创建文档接口
+// 作用：把 ChatGPT 的调用代理到“飞书 DocX 创建文档”接口
 async function proxyFeishu(req, res, path) {
   const target = `https://open.feishu.cn${path}`;
   const headers = { 'Content-Type': 'application/json; charset=utf-8' };
-  // 透传用户令牌（Authorization: Bearer <user_access_token>）由 ChatGPT 自动附带
+  // 透传用户令牌（Authorization: Bearer <user_access_token>）
   if (req.headers.authorization) headers['Authorization'] = req.headers.authorization;
 
   const body = ['GET','HEAD'].includes(req.method)
@@ -16,5 +16,6 @@ async function proxyFeishu(req, res, path) {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Only POST allowed' });
-  return proxyFeishu(req, res, '/open-apis/docx/v1/document/create');
+  // ✅ 注意：这里转发到正确的飞书端点 /open-apis/docx/v1/documents
+  return proxyFeishu(req, res, '/open-apis/docx/v1/documents');
 }

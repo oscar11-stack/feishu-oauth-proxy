@@ -1,17 +1,23 @@
 // /api/open-apis/docx/v1/appendBlocks/demo
-// 作用：不需要 body；从 query 取 document_id（block_id 默认等于 document_id），写入一段示例内容。
+// 容错版：若没传 document_id 或传了占位值，自动使用 REAL_DOC_ID
+const REAL_DOC_ID = 'JksNdLP4koA7DMxwpdfckPYPngg'; // ← 你的真实文档 ID
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Only POST allowed' });
   }
   try {
     const url = new URL(req.url, `https://${req.headers.host}`);
-    const document_id = url.searchParams.get('document_id') || url.searchParams.get('doc') || '';
-    const block_id = url.searchParams.get('block_id') || document_id;
+    let document_id =
+      url.searchParams.get('document_id') ||
+      url.searchParams.get('doc') ||
+      '';
 
-    if (!document_id) {
-      return res.status(400).json({ error: 'missing_document_id', hint: 'append ?document_id=xxxxx' });
-    }
+    // 占位值或空 -> 用真实 ID
+    const PLACEHOLDERS = new Set(['', 'demo-doc-id', 'demo-doc-001', 'docx_dummy_id_123']);
+    if (PLACEHOLDERS.has(document_id)) document_id = REAL_DOC_ID;
+
+    const block_id = url.searchParams.get('block_id') || document_id;
 
     const children = [
       {

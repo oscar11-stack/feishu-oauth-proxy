@@ -1,5 +1,5 @@
 // /api/open-apis/docx/v1/appendBlocks
-// 兼容：Body 或 Query；若缺 children 自动写一段段落；block_type 用数值枚举；官方端点 /children
+// 兼容：Body 或 Query；若缺 children 自动写入一段合法文本；官方端点 /children
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Only POST allowed' });
 
@@ -15,18 +15,16 @@ export default async function handler(req, res) {
     let children = bodyObj.children;
 
     if (!document_id) return res.status(400).json({ error: 'missing_params', need: ['document_id'] });
-
     const block_id = rawBlockId || document_id; // 根 Page = document_id
 
-    // 若调用方没给 children，注入最小合法的「段落」block（block_type 用数值 1）
+    // 若未提供 children，则注入最小合法文本块：block_type=2 + text.elements[].text_run
     if (!children) {
       children = [
         {
-          "block_type": 1,
-          "paragraph": {
-            "elements": [
-              { "text_run": { "content": "默认写入：appendBlocks 数值型 block_type 段落。\n", "text_element_style": {} } }
-            ]
+          "block_type": 2,
+          "text": {
+            "elements": [ { "text_run": { "content": "默认写入：合法文本段落（block_type=2）。\n", "text_element_style": {} } } ],
+            "style": {}
           }
         }
       ];

@@ -1,29 +1,36 @@
-// 把 ChatGPT 的标准 OAuth2 参数 适配为飞书 /authen/v1/index 需要的参数
-// - ChatGPT 会传 client_id / redirect_uri / state / response_type=code
-// - 飞书需要 app_id / redirect_uri / state（可选）/ response_type=code
+// api/feishu/auth.js
+// 作用：把 ChatGPT 的 OAuth 请求 302 到飞书授权页；严格编码 redirect_uri，并在 Runtime Logs 打印定位信息。
 export default async function handler(req, res) {
-  const url = new URL(req.url, `https://${req.headers.host}`);
-  const qp = new URLSearchParams(url.search || '');
+  try {
+    const url = new URL(req.url, `https://${req.headers.host}`);
+    const qp = new URLSearchParams(url.search || '');
 
-  // 从查询里取 redirect_uri、state；client_id 不用，改用环境变量更稳
-  const redirectUri = qp.get('redirect_uri') || '';
-  const state = qp.get('state') || '';
+    const redirectUri = qp.get('redirect_uri') || '';
+    const state = qp.get('state') || '';
+    const appId = process.env.FEISHU_APP_ID;
 
-  // 你的飞书 App ID 放在 Vercel 环境变量 FEISHU_APP_ID
-  const appId = process.env.FEISHU_APP_ID;
-  if (!appId) {
-    res.status(500).send('FEISHU_APP_ID not configured on server');
-    return;
+    if (!appId) {
+      console.log('[auth] missing FEISHU_APP_ID');
+      return res.status(500).send('FEISHU_APP_ID not configured on server');
+    }
+    if (!redirectUri) {
+      console.log('[auth] missing redirect_uri from client');
+      return res.status(400).send('missing redirect_uri');
+    }
+
+    // 严格编码 redirect_uri
+    const target = `https://open.feishu.cn/open-apis/authen/v1/index`
+      + `?app_id=${encodeURIComponent(appId)}`
+      + `&redirect_uri=${encodeURIComponent(redirectUri)}`
+      + `&response_type=code`
+      + (state ? `&state=${encodeURIComponent(state)}` : '');
+
+    console.log('[auth] 302 ->', target); // 到 Vercel Runtime Logs 可见
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Location', target);
+    return res.status(302).end();
+  } catch (e) {
+    console.log('[auth] exception', e);
+    return res.status(500).send('auth proxy exception');
   }
-
-  // 重新拼出飞书授权页地址（使用 app_id）
-  const target = new URL('https://open.feishu.cn/open-apis/authen/v1/index');
-  target.searchParams.set('app_id', appId);
-  if (redirectUri) target.searchParams.set('redirect_uri', redirectUri);
-  if (state) target.searchParams.set('state', state);
-  target.searchParams.set('response_type', 'code');
-
-  // 302 跳转
-  res.setHeader('Location', target.toString());
-  res.status(302).end();
 }

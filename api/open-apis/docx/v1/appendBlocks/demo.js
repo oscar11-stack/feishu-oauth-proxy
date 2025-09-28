@@ -1,5 +1,5 @@
 // /api/open-apis/docx/v1/appendBlocks/demo
-// 作用：不需要 body；从查询串里取 document_id（或用 block_id 同值），写入一段示例内容。
+// 作用：不需要 body；从 query 取 document_id（block_id 默认等于 document_id），写入一段示例内容。
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Only POST allowed' });
